@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-gemma-4-31b
+  labels:
+    app: vllm-gemma-4-31b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-gemma-4-31b
+  template:
+    metadata:
+      labels:
+        app: vllm-gemma-4-31b
+        ai.gke.io/model: gemma-4-31b-it
+        ai.gke.io/inference-server: vllm
+    spec:
+      containers:
+      - name: vllm-tpu
+        image: vllm/vllm-tpu:gemma4
+        command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        args:
+        - "--model"
+        - "google/gemma-4-31B-it"
+        - "--tensor-parallel-size"
+        - "8"
+        - "--max-model-len"
+        - "16384"
+        - "--disable_chunked_mm_input"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8000"
+        env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_token
+        ports:
+        - containerPort: 8000
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 60
+          periodSeconds: 30
+        resources:
+          limits:
+            google.com/tpu: "8"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      nodeSelector:
+        cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
+        cloud.google.com/gke-tpu-topology: 2x4
+        cloud.google.com/gke-flex-start: "true"
+      tolerations:
+      - key: "google.com/tpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
