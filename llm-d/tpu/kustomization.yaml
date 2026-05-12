@@ -1,0 +1,113 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - tmp/llm-d/guides/pd-disaggregation/modelserver/tpu/vllm
+
+labels:
+  - pairs:
+      llm-d.ai/model: google-gemma-4-31B-it
+    includeSelectors: true
+    includeTemplates: true
+
+patches:
+  - target:
+      kind: Deployment
+      name: decode
+    patch: |-
+      - op: replace
+        path: /spec/strategy
+        value:
+          type: Recreate
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: "google/gemma-4-31B-it"
+      - op: replace
+        path: /spec/template/spec/containers/0/args/1
+        value: "--max-model-len=16384"
+      - op: replace
+        path: /spec/template/spec/containers/0/args/12
+        value: '{"kv_connector":"TPUConnector","kv_connector_module_path":"tpu_inference.distributed.tpu_connector","kv_role":"kv_consumer"}'
+      - op: remove
+        path: /spec/template/spec/containers/0/args/9
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_token
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          limits:
+            google.com/tpu: 8
+          requests:
+            google.com/tpu: 8
+      - op: replace
+        path: /spec/template/spec/nodeSelector
+        value:
+          cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
+          cloud.google.com/gke-tpu-topology: 2x4
+          cloud.google.com/gke-flex-start: "true"
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: "google.com/tpu"
+            operator: "Exists"
+            effect: "NoSchedule"
+
+  - target:
+      kind: Deployment
+      name: prefill
+    patch: |-
+      - op: replace
+        path: /spec/strategy
+        value:
+          type: Recreate
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: "google/gemma-4-31B-it"
+      - op: replace
+        path: /spec/template/spec/containers/0/args/1
+        value: "--max-model-len=16384"
+      - op: replace
+        path: /spec/template/spec/containers/0/args/12
+        value: '{"kv_connector":"TPUConnector","kv_connector_module_path":"tpu_inference.distributed.tpu_connector","kv_role":"kv_producer"}'
+      - op: remove
+        path: /spec/template/spec/containers/0/args/9
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_token
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          limits:
+            google.com/tpu: 8
+          requests:
+            google.com/tpu: 8
+      - op: replace
+        path: /spec/template/spec/nodeSelector
+        value:
+          cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
+          cloud.google.com/gke-tpu-topology: 2x4
+          cloud.google.com/gke-flex-start: "true"
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: "google.com/tpu"
+            operator: "Exists"
+            effect: "NoSchedule"
+
+images:
+  - name: docker.io/vllm/vllm-tpu
+    newTag: gemma4
+
+
+

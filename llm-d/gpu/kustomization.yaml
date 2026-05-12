@@ -1,0 +1,125 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: llm-d-pd-disaggregation
+
+resources:
+  - ../tmp/llm-d/guides/pd-disaggregation/modelserver/gpu/vllm/gke
+  - compute-class.yaml
+
+labels:
+  - pairs:
+      llm-d.ai/model: google-gemma-4-31B-it
+    includeSelectors: true
+    includeTemplates: true
+
+images:
+  - name: docker.io/vllm/vllm-openai
+    newTag: gemma4
+
+patches:
+  - target:
+      kind: Deployment
+      name: decode
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/strategy
+        value:
+          type: Recreate
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: "google/gemma-4-31B-it"
+      - op: replace
+        path: /spec/template/spec/containers/0/args/2
+        value: "--tensor-parallel-size=2"
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: "--max-model-len=16384"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_token
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+            nvidia.com/gpu: 2
+            ephemeral-storage: 100Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+            nvidia.com/gpu: 2
+            ephemeral-storage: 100Gi
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          cloud.google.com/compute-class: a100-spot
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: "nvidia.com/gpu"
+            operator: "Exists"
+            effect: "NoSchedule"
+
+  - target:
+      kind: Deployment
+      name: prefill
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/strategy
+        value:
+          type: Recreate
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: "google/gemma-4-31B-it"
+      - op: replace
+        path: /spec/template/spec/containers/0/args/2
+        value: "--tensor-parallel-size=2"
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: "--max-model-len=16384"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_token
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          limits:
+            cpu: "16"
+            memory: 64Gi
+            nvidia.com/gpu: 2
+            ephemeral-storage: 100Gi
+          requests:
+            cpu: "16"
+            memory: 64Gi
+            nvidia.com/gpu: 2
+            ephemeral-storage: 100Gi
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          cloud.google.com/compute-class: a100-spot
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: "nvidia.com/gpu"
+            operator: "Exists"
+            effect: "NoSchedule"
+
+
